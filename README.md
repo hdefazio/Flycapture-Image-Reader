@@ -1,6 +1,6 @@
 # Flycapture-Image-Processing
 
-This project demonstrates a KWIVER process written in C++ that takes an image using a [Flycapture](https://www.ptgrey.com/flycapture-sdk) camera and pushes it to a pipeline. The example pipeline runs a [face detector](https://github.com/hdefazio/face_detection) on the image taken from the camera. 
+This project demonstrates a KWIVER process written in C++ that takes an image using a [Flycapture](https://www.ptgrey.com/flycapture-sdk) camera and pushes it to a pipeline. The example pipeline runs a [face detector](https://github.com/hdefazio/face_detection) on the image. 
 
 # Organization #
 
