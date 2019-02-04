@@ -1,0 +1,55 @@
+#==========================================================================
+process input
+	:: flycapture_input
+        camera_serial = 15444951
+	frame_rate = 10
+
+
+
+#==========================================================================
+process detector
+	:: image_object_detector
+	detector:type = face
+
+#==========================================================================
+process draw
+	:: draw_detected_object_set
+	block draw_algo
+		type = ocv
+		ocv:default_line_thickness = 4
+	endblock
+
+#==========================================================================
+process disp
+	:: image_viewer
+	annotate_image = true
+	pause_time = 0 #pause time (seconds), 0 denotes wait for keystroke
+	title = images
+
+#==========================================================================
+process writer
+  :: image_writer
+  file_name_template = ../examples/pipelines/output/image%04d.jpg
+  image_writer:type  = ocv
+#==========================================================================
+config _pipeline:_edge
+	capacity = 2
+
+#==========================================================================
+#connections
+connect from input.image
+        to   detector.image
+
+connect from detector.detected_object_set
+        to   draw.detected_object_set
+connect from input.image
+        to draw.image
+
+connect from input.timestamp
+        to   disp.timestamp
+connect from draw.image
+        to   disp.image
+
+connect from draw.image 
+	to writer.image
+
