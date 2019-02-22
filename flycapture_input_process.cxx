@@ -1,5 +1,10 @@
 #include "flycapture_input_process.h"
 
+#include <curses.h>
+#include <stdio.h>
+#include <stdlib.h>
+//#include <conio.h>
+
 #include <vital/vital_types.h>
 #include <vital/types/timestamp.h>
 //#include <vital/types/image_container.h>
@@ -46,9 +51,10 @@ namespace kwiver {
 // (config-key, value-type, default-value, description )
 
 
-create_config_trait( camera_serial, int, "15444951 ", "serial number of the camera" );
+create_config_trait( camera_serial, int, "15444951", "serial number of the camera" );
 
-create_config_trait( frame_rate, double, "10", " ");
+create_config_trait( frame_time, double, "3.0", "inter frame time in seconds");
+
 
 
 
@@ -63,12 +69,12 @@ public:
 
   // Configuration values
   int m_config_camera_serial;
-  kwiver::vital::time_usec_t m_config_frame_rate;
+  kwiver::vital::time_usec_t m_config_frame_time;
   
 
   // process local data
   kwiver::vital::frame_id_t m_frame_number;
-  kwiver::vital::time_usec_t m_frame_rate;
+  kwiver::vital::time_usec_t m_frame_time;
 
 
 
@@ -99,7 +105,7 @@ void flycapture_input_process
   scoped_configure_instrumentation();
 
   // Examine the configuration
-  d->m_config_frame_rate          = config_value_using_trait( frame_rate ) * 1e6; // in usec
+  d->m_config_frame_time          = config_value_using_trait( frame_time ) * 1e6; // in usec
   
   kwiver::vital::config_block_sptr algo_config = get_config(); // config for process
 
@@ -125,8 +131,8 @@ void flycapture_input_process
      scoped_step_instrumentation();
     
      int serial = 0;
-     std::string frame_id( "/cueing/right");
-     float frame_rate = d->m_frame_rate;
+     double frame_rate = d->m_config_frame_time/1e6; //fps
+     std::cout << "frame rate: " << frame_rate << std::endl;
     
      FlyCapture2::BusManager busMgr;
      FlyCapture2::Error error;
@@ -172,7 +178,7 @@ void flycapture_input_process
         error.PrintErrorTrace();
      return;
      }
-     std::cout << "DEBUG -- printing camera info" << std::endl;
+     //std::cout << "DEBUG -- printing camera info" << std::endl;
      
      CameraInfo* pCamInfo = &camInfo;
      std::cout << std::endl;
@@ -224,7 +230,7 @@ void flycapture_input_process
 
      bool isValid;
      Format7PacketInfo fmt7PacketInfo;
-     std::cout << "DEBUG -- validate settings" << std::endl;
+     //std::cout << "DEBUG -- validate settings" << std::endl;
      // Validate the settings to make sure that they are valid
      error = cam.ValidateFormat7Settings(
          &fmt7ImageSettings,
@@ -240,7 +246,7 @@ void flycapture_input_process
          std::cout << "Format7 settings are not valid" << std::endl;
          return;
      }
-     std::cout << "DEBUG -- set settings" << std::endl;
+     std::cout << std::endl << std::endl << "DEBUG -- set settings" << std::endl;
      // Set the settings to the camera
      error = cam.SetFormat7Configuration(
          &fmt7ImageSettings,
@@ -256,49 +262,65 @@ void flycapture_input_process
         error.PrintErrorTrace();
      return;
      }
-     std::cout << "DEBUG -- setting variables" << std::endl;
+     std::cout << "DEBUG -- setting variables" << std::endl << std::endl;
     
      Image raw_image;
      Image rgb_image;
+     
 
-     raw_image = Image();
-     std::cout << "DEBUG -- retrieve buffer" << std::endl;
-     error = cam.RetrieveBuffer(&raw_image);
-     if(error != PGRERROR_OK){
-             std::cout << "DEBUG -- Error thrown" << std::endl;
-             error.PrintErrorTrace();
-             return;
-     }
-     //convert to rgb
-     std::cout << "DEBUG -- before convert()" << std::endl;
-     rgb_image = Image();
-     raw_image.Convert(FlyCapture2::PIXEL_FORMAT_RGB, &rgb_image);
-     std::cout << "DEBUG -- after convert()" << std::endl;
+     //while(key != 113){
+     int num_images = 3;
+     //for(int image_count=0; image_count < num_images; ++image_count){
+	std::cout << "DEBUG -- loop" << std::endl;
+        raw_image = Image();
+        //std::cout << "DEBUG -- retrieve buffer" << std::endl;
+        error = cam.RetrieveBuffer(&raw_image);
+        if(error != PGRERROR_OK){
+                error.PrintErrorTrace();
+                return;
+        }
+     
+        //convert to rgb
+        std::cout << "DEBUG -- convert to RGB" << std::endl;
+        rgb_image = Image();
+        raw_image.Convert(FlyCapture2::PIXEL_FORMAT_RGB, &rgb_image);
 
-     //convert to cv::Mat     
-     unsigned int rowBytes = (double)rgb_image.GetReceivedDataSize()/(double)rgb_image.GetRows();
-     cv::Mat mat_image = cv::Mat(rgb_image.GetRows(), rgb_image.GetCols(), CV_8UC3, rgb_image.GetData(), rowBytes);
-     //cv::imshow("image", test_image);
+	//convert to cv::Mat
+	std::cout << "DEBUG -- convert to Mat" << std::endl;
+        unsigned int rowBytes = (double)rgb_image.GetReceivedDataSize()/(double)rgb_image.GetRows();
+        cv::Mat mat_image = cv::Mat(rgb_image.GetRows(), rgb_image.GetCols(), CV_8UC3, rgb_image.GetData(), rowBytes);
+        //cv::imshow("image", test_image);
 
-     //put into image container
-     kwiver::vital::image_container_sptr image_c = std::make_shared<arrows::ocv::image_container>(mat_image, arrows::ocv::image_container::BGR_COLOR);
-     //vital::image image_i = vital::image(rgb_image.GetRows(), rgb_image.GetCols(), 3);	
+	//convert to image
+	 vital::image k_image = arrows::ocv::image_container::ocv_to_vital(mat_image, arrows::ocv::image_container::BGR_COLOR);
+
+	//put into image container
+        std::cout << "DEBUG -- convert to image container" << std::endl;
+        std::shared_ptr<kwiver::vital::image_container> image_c = std::make_shared<arrows::ocv::image_container>(k_image);
+//(mat_image, arrows::ocv::image_container::BGR_COLOR); 
+        
+	if(image_c != NULL){
+		
+        kwiver::vital::timestamp frame_ts( d->m_frame_time, d->m_frame_number );
+
 	
-      kwiver::vital::timestamp frame_ts( d->m_frame_rate, d->m_frame_number );
-
-      // update timestamp
-      ++d->m_frame_number;
-      d->m_frame_rate += d->m_config_frame_rate;
+        // update timestampstd::cout << "DEBUG -- update timestamp" << std::endl;
+        ++d->m_frame_number;
+        d->m_frame_time += d->m_config_frame_time;
 	
-      push_to_port_using_trait( timestamp, frame_ts );
-      push_to_port_using_trait( image, image_c );
-	  
+	std::cout << "DEBUG -- push to port" << std::endl;
+        push_to_port_using_trait( timestamp, frame_ts );
+        push_to_port_using_trait( image, image_c );
+	//std::cout << "DEBUG -- 2" << std::endl << std::endl;
+	std::cout << std::endl;
+}else std::cout << "Try again" << std::endl;
+    // }//end loop  
           
      std::cout << "DEBUG -- out of loop" << std::endl;
      error = cam.StopCapture();
      if(error != PGRERROR_OK){
-        error.PrintErrorTrace();
-     return;
+	error.PrintErrorTrace();
+        return;
      }
      cam.Disconnect();
      
@@ -334,7 +356,7 @@ void flycapture_input_process
 
 
   declare_config_using_trait( camera_serial );
-  declare_config_using_trait( frame_rate );
+  declare_config_using_trait( frame_time );
   
 
 }
@@ -343,7 +365,7 @@ void flycapture_input_process
 flycapture_input_process::priv
 ::priv()
   : m_frame_number( 1 )
-  , m_frame_rate( 0 )
+  , m_frame_time( 0 )
 {}
 
 
